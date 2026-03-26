@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import sdk from "@farcaster/frame-sdk";
+import { initApp, shareResult, openUrl } from "@/lib/sdk-wrapper";
 import type { TokenSafetyReport } from "@/lib/scanner";
 
 export default function TokenScanner() {
@@ -12,19 +12,11 @@ export default function TokenScanner() {
   const [error, setError] = useState<string | null>(null);
   const [scanHistory, setScanHistory] = useState<string[]>([]);
 
-  // Initialize Farcaster SDK
+  // Initialize Hybrid SDK
   useEffect(() => {
-    const load = async () => {
-      try {
-        sdk.actions.ready();
-      } catch {
-        // Not in Farcaster context — running standalone
-        console.log("Running outside Farcaster");
-      }
-    };
     if (!isSDKLoaded) {
       setIsSDKLoaded(true);
-      load();
+      initApp().catch(console.error);
     }
   }, [isSDKLoaded]);
 
@@ -83,22 +75,14 @@ export default function TokenScanner() {
 
   const handleShare = useCallback(async () => {
     if (!report) return;
-    const emoji =
-      report.grade === "SAFE" ? "🟢" : report.grade === "CAUTION" ? "🟡" : report.grade === "WARNING" ? "🟠" : "🔴";
-    const passCount = report.checks.filter((c) => c.passed).length;
-    const text = `${emoji} ${report.symbol} Safety Score: ${report.score}/100 (${report.grade})\n\n${passCount}/${report.checks.length} checks passed\n\nScanned with Base Token Guard 🛡️`;
     const appUrl = typeof window !== "undefined" ? window.location.origin : "";
-
-    try {
-      await sdk.actions.openUrl(
-        `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(`${appUrl}?address=${report.address}`)}`
-      );
-    } catch {
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text);
-        alert("Copied to clipboard!");
-      }
-    }
+    await shareResult({
+      symbol: report.symbol,
+      score: report.score,
+      grade: report.grade,
+      address: report.address,
+      appUrl
+    });
   }, [report]);
 
   return (
@@ -258,11 +242,7 @@ export default function TokenScanner() {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  try {
-                    sdk.actions.openUrl(`https://basescan.org/token/${report.address}`);
-                  } catch {
-                    window.open(`https://basescan.org/token/${report.address}`, "_blank");
-                  }
+                  openUrl(`https://basescan.org/token/${report.address}`);
                 }}
                 className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 rounded-lg text-sm transition-colors"
               >

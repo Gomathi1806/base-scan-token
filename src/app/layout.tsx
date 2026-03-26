@@ -5,14 +5,26 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://base-token-guard.verc
 
 export const metadata: Metadata = {
   title: "Base Token Guard — Check Any Token Safety",
-  description: "Instantly scan Base chain tokens for rug pulls, honeypots, and red flags. Free safety reports powered by Newsie.tech.",
+  description: "Instantly scan Base chain tokens for rug pulls, honeypots, and red flags.",
+  
+  // Standard Open Graph (works everywhere: Twitter, Discord, Base App, etc.)
   openGraph: {
     title: "🛡️ Base Token Guard",
     description: "Check any Base token safety in 1 click",
     images: [`${appUrl}/og-default.png`],
+    type: "website",
   },
+  
+  // Twitter card
+  twitter: {
+    card: "summary_large_image",
+    title: "🛡️ Base Token Guard",
+    description: "Check any Base token safety in 1 click",
+    images: [`${appUrl}/og-default.png`],
+  },
+
   other: {
-    // Farcaster Frame embed meta tag
+    // Farcaster Frame embed meta (keeps Warpcast compatibility)
     "fc:frame": JSON.stringify({
       version: "next",
       imageUrl: `${appUrl}/og-default.png`,
