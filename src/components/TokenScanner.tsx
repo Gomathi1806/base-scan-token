@@ -239,6 +239,17 @@ export default function TokenScanner() {
               📤 Share Result on Farcaster
             </button>
 
+            {report && report.grade === "SAFE" && (
+              <button
+                onClick={() => openUrl(
+                  `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${report.address}&chain=base`
+                )}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
+              >
+                Trade on Uniswap
+              </button>
+            )}
+
             <div className="flex gap-2">
               <button
                 onClick={() => {
