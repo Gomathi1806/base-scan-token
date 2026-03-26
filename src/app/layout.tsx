@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "@/components/Providers";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://base-token-guard.vercel.app";
 
@@ -49,7 +50,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-950 text-white antialiased">{children}</body>
+      <body className="bg-slate-950 text-white antialiased">
+        <Providers>
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }

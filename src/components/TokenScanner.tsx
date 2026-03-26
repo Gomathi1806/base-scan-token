@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { initApp, shareResult, openUrl } from "@/lib/sdk-wrapper";
+import { initApp, shareResult, openExternalUrl, getTokenViewUrl, getSwapUrl, getContext } from "@/lib/sdk-wrapper";
 import type { TokenSafetyReport } from "@/lib/scanner";
 
 export default function TokenScanner() {
@@ -14,10 +14,7 @@ export default function TokenScanner() {
 
   // Initialize Hybrid SDK
   useEffect(() => {
-    if (!isSDKLoaded) {
-      setIsSDKLoaded(true);
-      initApp().catch(console.error);
-    }
+    initApp();
   }, [isSDKLoaded]);
 
   // Check URL params for pre-filled address
@@ -231,41 +228,41 @@ export default function TokenScanner() {
           </div>
 
           {/* Action buttons */}
-          <div className="space-y-2 mb-4">
-            <button
-              onClick={handleShare}
-              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
-            >
-              📤 Share Result on Farcaster
-            </button>
-
-            {report && report.grade === "SAFE" && (
-              <button
-                onClick={() => openUrl(
-                  `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${report.address}&chain=base`
-                )}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
-              >
-                Trade on Uniswap
-              </button>
-            )}
-
+          <div className="space-y-4 mb-4">
             <div className="flex gap-2">
+              {/* Share button */}
               <button
-                onClick={() => {
-                  openUrl(`https://basescan.org/token/${report.address}`);
-                }}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 rounded-lg text-sm transition-colors"
+                onClick={handleShare}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-lg text-sm"
               >
-                Basescan ↗
+                Share
               </button>
+
+              {/* View on Basescan / Base App */}
               <button
-                onClick={handleNewScan}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 rounded-lg text-sm transition-colors"
+                onClick={() => openExternalUrl(getTokenViewUrl(report.address))}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-lg text-sm"
               >
-                ← Scan Another
+                View Token
               </button>
+
+              {/* Trade on Uniswap — EARNS BUILDER CODE REVENUE */}
+              {report.grade !== "DANGER" && (
+                <button
+                  onClick={() => openExternalUrl(getSwapUrl(report.address))}
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-lg text-sm"
+                >
+                  Trade
+                </button>
+              )}
             </div>
+
+            <button
+              onClick={handleNewScan}
+              className="w-full bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 font-medium py-2.5 rounded-lg text-sm transition-colors"
+            >
+              ← Scan Another Token
+            </button>
           </div>
         </div>
       )}
