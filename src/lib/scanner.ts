@@ -1,15 +1,13 @@
 /**
- * Base Token Guard — Safety Scanner
- * Analyzes Base chain tokens for common red flags
- *
- * Checks performed:
- * 1. Contract verified on Basescan?
- * 2. Ownership renounced?
- * 3. Liquidity locked/sufficient?
- * 4. Top holder concentration
- * 5. Honeypot indicators
- * 6. Contract age
- * 7. Transaction count (activity level)
+ * Base Token Guard — Safety Scanner v4
+ * 
+ * Built for Etherscan V2 API (chainid=8453 for Base)
+ * 
+ * V2 BREAKING CHANGES HANDLED:
+ * - token/tokentx requires `address` param (can't query by contractaddress alone)
+ * - Uses account/txlist instead (works with just contract address)
+ * - Gets contract age from oldest transaction (asc sort) as fallback
+ * - All calls sequential with 300ms delay
  */
 
 export interface TokenSafetyReport {
@@ -18,7 +16,7 @@ export interface TokenSafetyReport {
   symbol: string;
   decimals: number;
   totalSupply: string;
-  score: number; // 0-100
+  score: number;
   grade: "SAFE" | "CAUTION" | "WARNING" | "DANGER";
   gradeColor: string;
   checks: SafetyCheck[];
@@ -30,77 +28,280 @@ export interface SafetyCheck {
   passed: boolean;
   weight: number;
   detail: string;
-  icon: string; // emoji
+  icon: string;
 }
 
-const BASESCAN_API = "https://api.basescan.org/api";
+const API_BASE = "https://api.etherscan.io/v2/api?chainid=8453";
 
-export async function scanToken(
-  address: string,
-  apiKey: string
-): Promise<TokenSafetyReport> {
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function apiFetch(params: string, apiKey: string): Promise<any> {
+  // Note: API_BASE already has ? so we use & to append
+  const url = `${API_BASE}&${params}&apikey=${apiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.message === "NOTOK") {
+      console.error(`[TokenGuard] API error for ${params.slice(0, 60)}: ${typeof data.result === 'string' ? data.result : JSON.stringify(data.result).slice(0, 100)}`);
+    }
+    return data;
+  } catch (err) {
+    console.error(`[TokenGuard] Fetch error:`, err);
+    return null;
+  }
+}
+
+export async function scanToken(address: string, apiKey: string): Promise<TokenSafetyReport> {
   const checks: SafetyCheck[] = [];
+  const addr = address.trim();
 
-  // Normalize address
-  const addr = address.trim().toLowerCase();
+  // ============================================================
+  // API CALL 1: Source code (reused for Check 1 + Check 6)
+  // ============================================================
+  const sourceData = await apiFetch(
+    `module=contract&action=getsourcecode&address=${addr}`,
+    apiKey
+  );
+  await delay(300);
 
-  // 1. Get basic token info
-  const tokenInfo = await getTokenInfo(addr, apiKey);
+  // ============================================================
+  // API CALL 2: Token name via eth_call → name() selector 0x06fdde03
+  // ============================================================
+  const nameData = await apiFetch(
+    `module=proxy&action=eth_call&to=${addr}&data=0x06fdde03&tag=latest`,
+    apiKey
+  );
+  await delay(300);
 
-  // 2. Check if contract source is verified
-  const sourceCheck = await checkSourceVerified(addr, apiKey);
-  checks.push(sourceCheck);
+  // ============================================================
+  // API CALL 3: Token symbol via eth_call → symbol() selector 0x95d89b41
+  // ============================================================
+  const symbolData = await apiFetch(
+    `module=proxy&action=eth_call&to=${addr}&data=0x95d89b41&tag=latest`,
+    apiKey
+  );
+  await delay(300);
 
-  // 3. Check contract creator and ownership
-  const ownerCheck = await checkOwnership(addr, apiKey);
-  checks.push(ownerCheck);
+  // ============================================================
+  // API CALL 4: Owner via eth_call → owner() selector 0x8da5cb5b
+  // ============================================================
+  const ownerData = await apiFetch(
+    `module=proxy&action=eth_call&to=${addr}&data=0x8da5cb5b&tag=latest`,
+    apiKey
+  );
+  await delay(300);
 
-  // 4. Check top holder concentration
-  const holderCheck = await checkHolderConcentration(addr, apiKey);
-  checks.push(holderCheck);
+  // ============================================================
+  // API CALL 5: Recent transactions TO/FROM contract (for activity + holders)
+  // NOTE: This uses account/txlist NOT token/tokentx
+  // V2 API requires `address` for tokentx, but txlist works with just the contract
+  // ============================================================
+  const recentTxData = await apiFetch(
+    `module=account&action=txlist&address=${addr}&page=1&offset=50&sort=desc&startblock=0&endblock=99999999`,
+    apiKey
+  );
+  await delay(300);
 
-  // 5. Check contract age
-  const ageCheck = await checkContractAge(addr, apiKey);
-  checks.push(ageCheck);
+  // ============================================================
+  // API CALL 6: Oldest transactions (for contract age)
+  // Get the very first transaction to determine deployment date
+  // ============================================================
+  const oldestTxData = await apiFetch(
+    `module=account&action=txlist&address=${addr}&page=1&offset=1&sort=asc&startblock=0&endblock=99999999`,
+    apiKey
+  );
 
-  // 6. Check transaction activity
-  const activityCheck = await checkActivity(addr, apiKey);
-  checks.push(activityCheck);
+  // ============================================================
+  // PARSE TOKEN INFO
+  // ============================================================
+  const tokenName = decodeString(nameData?.result) || sourceData?.result?.[0]?.ContractName || "Unknown";
+  const tokenSymbol = decodeString(symbolData?.result) || "???";
 
-  // 7. Check if contract has dangerous functions (mint, pause, blacklist)
-  const functionCheck = await checkDangerousFunctions(addr, apiKey);
-  checks.push(functionCheck);
+  // ============================================================
+  // CHECK 1: Source Code Verified (weight: 25)
+  // ============================================================
+  const isVerified =
+    sourceData?.status === "1" &&
+    !!sourceData?.result?.[0]?.SourceCode &&
+    sourceData.result[0].SourceCode !== "";
 
-  // Calculate overall score
-  const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0);
-  const earnedWeight = checks
-    .filter((c) => c.passed)
-    .reduce((sum, c) => sum + c.weight, 0);
-  const score = Math.round((earnedWeight / totalWeight) * 100);
+  checks.push({
+    name: "Source Code Verified",
+    passed: isVerified,
+    weight: 25,
+    detail: isVerified
+      ? `Verified on Basescan (${sourceData.result[0].CompilerVersion?.split("+")[0] || "Solidity"})`
+      : "Source code NOT verified — cannot inspect contract logic",
+    icon: isVerified ? "✅" : "🚨",
+  });
 
-  // Determine grade
+  // ============================================================
+  // CHECK 2: Ownership Renounced (weight: 20)
+  // ============================================================
+  let ownerPassed = true;
+  let ownerDetail = "No owner function — not an Ownable contract";
+
+  if (ownerData?.result && ownerData.result !== "0x" && ownerData.result.length === 66) {
+    const ownerHex = "0x" + ownerData.result.slice(26);
+    const isZero = ownerHex === "0x0000000000000000000000000000000000000000";
+    const isDead = ownerHex.toLowerCase() === "0x000000000000000000000000000000000000dead";
+
+    if (isZero || isDead) {
+      ownerPassed = true;
+      ownerDetail = "Ownership renounced (zero/dead address)";
+    } else {
+      ownerPassed = false;
+      ownerDetail = `Active owner: ${ownerHex.slice(0, 6)}...${ownerHex.slice(-4)}`;
+    }
+  }
+
+  checks.push({
+    name: "Ownership Renounced",
+    passed: ownerPassed,
+    weight: 20,
+    detail: ownerDetail,
+    icon: ownerPassed ? "✅" : "⚠️",
+  });
+
+  // ============================================================
+  // CHECK 3: Holder Distribution (weight: 15)
+  // Count unique addresses from recent contract transactions
+  // ============================================================
+  let holdersPassed = false;
+  let holdersDetail = "No transaction data found";
+
+  if (recentTxData?.status === "1" && Array.isArray(recentTxData.result) && recentTxData.result.length > 0) {
+    const uniqueAddrs = new Set<string>();
+    for (const tx of recentTxData.result) {
+      if (tx.from) uniqueAddrs.add(tx.from.toLowerCase());
+      if (tx.to) uniqueAddrs.add(tx.to.toLowerCase());
+    }
+    const count = uniqueAddrs.size;
+    holdersPassed = count >= 10;
+    holdersDetail = holdersPassed
+      ? `${count}+ unique addresses interacting with contract`
+      : `Only ${count} unique addresses found — limited activity`;
+  }
+
+  checks.push({
+    name: "Holder Distribution",
+    passed: holdersPassed,
+    weight: 15,
+    detail: holdersDetail,
+    icon: holdersPassed ? "✅" : "⚠️",
+  });
+
+  // ============================================================
+  // CHECK 4: Contract Age (weight: 10)
+  // Uses the timestamp of the oldest transaction
+  // ============================================================
+  let agePassed = false;
+  let ageDetail = "Could not determine contract age";
+
+  if (oldestTxData?.status === "1" && Array.isArray(oldestTxData.result) && oldestTxData.result.length > 0) {
+    const firstTx = oldestTxData.result[0];
+    if (firstTx.timeStamp) {
+      const timestamp = parseInt(firstTx.timeStamp);
+      const ageDays = Math.floor((Date.now() / 1000 - timestamp) / 86400);
+      agePassed = ageDays > 7;
+      ageDetail = agePassed
+        ? `First activity ${ageDays} days ago — established contract`
+        : `Only ${ageDays} day(s) old — very new, higher risk`;
+    }
+  }
+
+  checks.push({
+    name: "Contract Age",
+    passed: agePassed,
+    weight: 10,
+    detail: ageDetail,
+    icon: agePassed ? "✅" : "⚠️",
+  });
+
+  // ============================================================
+  // CHECK 5: Trading Activity (weight: 15)
+  // ============================================================
+  let activityPassed = false;
+  let activityDetail = "No trading data available";
+
+  if (recentTxData?.status === "1" && Array.isArray(recentTxData.result) && recentTxData.result.length > 0) {
+    const txCount = recentTxData.result.length;
+    const newestTx = recentTxData.result[0]; // sorted desc, so first = newest
+    if (newestTx.timeStamp) {
+      const hoursSince = (Date.now() / 1000 - parseInt(newestTx.timeStamp)) / 3600;
+      const recentActivity = hoursSince < 168; // within 7 days
+
+      activityPassed = txCount >= 10 && recentActivity;
+      activityDetail = activityPassed
+        ? `${txCount}+ transactions (last activity ${Math.floor(hoursSince)}h ago)`
+        : txCount < 10
+          ? `Low activity — only ${txCount} transactions found`
+          : `Last activity was ${Math.floor(hoursSince / 24)} days ago`;
+    }
+  }
+
+  checks.push({
+    name: "Trading Activity",
+    passed: activityPassed,
+    weight: 15,
+    detail: activityDetail,
+    icon: activityPassed ? "✅" : "⚠️",
+  });
+
+  // ============================================================
+  // CHECK 6: Dangerous Functions (weight: 15)
+  // Reuses sourceData — no extra API call
+  // ============================================================
+  let dangerPassed = false;
+  let dangerDetail = "Cannot check — source not verified";
+
+  if (isVerified && sourceData?.result?.[0]?.SourceCode) {
+    const src = sourceData.result[0].SourceCode.toLowerCase();
+    const dangers: string[] = [];
+
+    if (src.includes("function mint(") || src.includes("function mint (")) dangers.push("mint()");
+    if (src.includes("function pause(") || src.includes("function pause (")) dangers.push("pause()");
+    if (src.includes("blacklist") || src.includes("blocklist")) dangers.push("blacklist");
+    if (src.includes("settaxfee") || src.includes("function setfee")) dangers.push("setFee()");
+    if (src.includes("enabletrading") || src.includes("settradingopen")) dangers.push("trading toggle");
+
+    dangerPassed = dangers.length === 0;
+    dangerDetail = dangerPassed
+      ? "No dangerous owner functions detected"
+      : `Risky functions found: ${dangers.join(", ")}`;
+  }
+
+  checks.push({
+    name: "No Dangerous Functions",
+    passed: dangerPassed,
+    weight: 15,
+    detail: dangerDetail,
+    icon: dangerPassed ? "✅" : "🚨",
+  });
+
+  // ============================================================
+  // CALCULATE SCORE
+  // ============================================================
+  const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
+  const earned = checks.filter((c) => c.passed).reduce((s, c) => s + c.weight, 0);
+  const score = Math.round((earned / totalWeight) * 100);
+
   let grade: TokenSafetyReport["grade"];
   let gradeColor: string;
-  if (score >= 80) {
-    grade = "SAFE";
-    gradeColor = "#22c55e";
-  } else if (score >= 60) {
-    grade = "CAUTION";
-    gradeColor = "#eab308";
-  } else if (score >= 40) {
-    grade = "WARNING";
-    gradeColor = "#f97316";
-  } else {
-    grade = "DANGER";
-    gradeColor = "#ef4444";
-  }
+  if (score >= 80) { grade = "SAFE"; gradeColor = "#22c55e"; }
+  else if (score >= 60) { grade = "CAUTION"; gradeColor = "#eab308"; }
+  else if (score >= 40) { grade = "WARNING"; gradeColor = "#f97316"; }
+  else { grade = "DANGER"; gradeColor = "#ef4444"; }
 
   return {
     address: addr,
-    name: tokenInfo.name || "Unknown",
-    symbol: tokenInfo.symbol || "???",
-    decimals: tokenInfo.decimals || 18,
-    totalSupply: tokenInfo.totalSupply || "0",
+    name: tokenName,
+    symbol: tokenSymbol,
+    decimals: 18,
+    totalSupply: "0",
     score,
     grade,
     gradeColor,
@@ -109,388 +310,33 @@ export async function scanToken(
   };
 }
 
-async function getTokenInfo(address: string, apiKey: string) {
+// ============================================================
+// DECODE ABI-ENCODED STRING
+// ============================================================
+function decodeString(hex: string | undefined | null): string {
   try {
-    const res = await fetch(
-      `${BASESCAN_API}?module=token&action=tokeninfo&contractaddress=${address}&apikey=${apiKey}`
-    );
-    const data = await res.json();
-    if (data.status === "1" && data.result?.length > 0) {
-      const token = data.result[0];
-      return {
-        name: token.tokenName || token.name,
-        symbol: token.symbol,
-        decimals: parseInt(token.divisor || token.decimals || "18"),
-        totalSupply: token.totalSupply,
-      };
-    }
-  } catch (e) {
-    console.error("getTokenInfo error:", e);
-  }
-
-  // Fallback: try ERC20 name/symbol via contract call
-  try {
-    const nameRes = await fetch(
-      `${BASESCAN_API}?module=proxy&action=eth_call&to=${address}&data=0x06fdde03&tag=latest&apikey=${apiKey}`
-    );
-    const nameData = await nameRes.json();
-
-    const symbolRes = await fetch(
-      `${BASESCAN_API}?module=proxy&action=eth_call&to=${address}&data=0x95d89b41&tag=latest&apikey=${apiKey}`
-    );
-    const symbolData = await symbolRes.json();
-
-    return {
-      name: decodeString(nameData.result) || "Unknown",
-      symbol: decodeString(symbolData.result) || "???",
-      decimals: 18,
-      totalSupply: "0",
-    };
-  } catch {
-    return { name: "Unknown", symbol: "???", decimals: 18, totalSupply: "0" };
-  }
-}
-
-function decodeString(hex: string): string {
-  try {
-    if (!hex || hex === "0x") return "";
-    // Skip function selector offset and length, decode UTF-8
+    if (!hex || hex === "0x" || hex === "0x0" || hex.length < 66) return "";
     const stripped = hex.slice(2);
-    if (stripped.length < 128) return "";
-    const offset = parseInt(stripped.slice(0, 64), 16) * 2;
-    const length = parseInt(stripped.slice(offset, offset + 64), 16);
-    const data = stripped.slice(offset + 64, offset + 64 + length * 2);
-    return Buffer.from(data, "hex").toString("utf-8").replace(/\0/g, "");
+
+    // ABI-encoded string: 32-byte offset + 32-byte length + data
+    if (stripped.length >= 128) {
+      const offset = parseInt(stripped.slice(0, 64), 16);
+      if (offset === 32) {
+        const length = parseInt(stripped.slice(64, 128), 16);
+        if (length > 0 && length <= 64) {
+          const data = stripped.slice(128, 128 + length * 2);
+          const decoded = Buffer.from(data, "hex").toString("utf-8").replace(/\0/g, "").trim();
+          if (decoded.length > 0) return decoded;
+        }
+      }
+    }
+
+    // bytes32: some tokens encode name/symbol as bytes32
+    const b32 = Buffer.from(stripped.slice(0, 64), "hex").toString("utf-8").replace(/\0/g, "").trim();
+    if (b32 && /^[\x20-\x7E]+$/.test(b32)) return b32;
+
+    return "";
   } catch {
     return "";
-  }
-}
-
-async function checkSourceVerified(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    const res = await fetch(
-      `${BASESCAN_API}?module=contract&action=getsourcecode&address=${address}&apikey=${apiKey}`
-    );
-    const data = await res.json();
-    const verified =
-      data.status === "1" &&
-      data.result?.[0]?.SourceCode &&
-      data.result[0].SourceCode !== "";
-
-    return {
-      name: "Source Code Verified",
-      passed: verified,
-      weight: 25,
-      detail: verified
-        ? "Contract source code is publicly verified on Basescan"
-        : "Contract source code is NOT verified — cannot inspect what it does",
-      icon: verified ? "✅" : "🚨",
-    };
-  } catch {
-    return {
-      name: "Source Code Verified",
-      passed: false,
-      weight: 25,
-      detail: "Could not check verification status",
-      icon: "❓",
-    };
-  }
-}
-
-async function checkOwnership(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    // Check owner() function — returns address(0) if renounced
-    const res = await fetch(
-      `${BASESCAN_API}?module=proxy&action=eth_call&to=${address}&data=0x8da5cb5b&tag=latest&apikey=${apiKey}`
-    );
-    const data = await res.json();
-
-    if (
-      data.result &&
-      data.result !==
-        "0x0000000000000000000000000000000000000000000000000000000000000000"
-    ) {
-      const ownerAddr = "0x" + data.result.slice(26);
-      const isZero =
-        ownerAddr === "0x0000000000000000000000000000000000000000";
-      const isDead =
-        ownerAddr.toLowerCase() ===
-        "0x000000000000000000000000000000000000dead";
-
-      if (isZero || isDead) {
-        return {
-          name: "Ownership Renounced",
-          passed: true,
-          weight: 20,
-          detail: "Contract ownership has been renounced (owner is zero/dead address)",
-          icon: "✅",
-        };
-      }
-      return {
-        name: "Ownership Renounced",
-        passed: false,
-        weight: 20,
-        detail: `Contract still has an active owner: ${ownerAddr.slice(0, 6)}...${ownerAddr.slice(-4)}`,
-        icon: "⚠️",
-      };
-    }
-
-    // No owner function — might be okay (not all tokens have Ownable)
-    return {
-      name: "Ownership Renounced",
-      passed: true,
-      weight: 20,
-      detail: "No owner function found — contract may not use Ownable pattern",
-      icon: "✅",
-    };
-  } catch {
-    return {
-      name: "Ownership Renounced",
-      passed: false,
-      weight: 20,
-      detail: "Could not determine ownership status",
-      icon: "❓",
-    };
-  }
-}
-
-async function checkHolderConcentration(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    // Get top token holders via tokentx
-    const res = await fetch(
-      `${BASESCAN_API}?module=token&action=tokenholderlist&contractaddress=${address}&page=1&offset=10&apikey=${apiKey}`
-    );
-    const data = await res.json();
-
-    if (data.status === "1" && data.result?.length > 0) {
-      // Check if top holder has > 50% of supply
-      const topHolder = data.result[0];
-      const topHolderPct = parseFloat(topHolder.TokenHolderQuantity) / parseFloat(topHolder.TokenHolderQuantity) * 100;
-
-      // Simple heuristic: if we got fewer than 5 holders, concentration is high
-      const holderCount = data.result.length;
-      const passed = holderCount >= 5;
-
-      return {
-        name: "Holder Distribution",
-        passed,
-        weight: 15,
-        detail: passed
-          ? `Token has ${holderCount}+ holders — reasonable distribution`
-          : `Only ${holderCount} holders found — very concentrated ownership`,
-        icon: passed ? "✅" : "⚠️",
-      };
-    }
-
-    // Fallback: check transfer count as proxy
-    const txRes = await fetch(
-      `${BASESCAN_API}?module=token&action=tokentx&contractaddress=${address}&page=1&offset=1&sort=desc&apikey=${apiKey}`
-    );
-    const txData = await txRes.json();
-    const hasTx = txData.status === "1" && txData.result?.length > 0;
-
-    return {
-      name: "Holder Distribution",
-      passed: hasTx,
-      weight: 15,
-      detail: hasTx
-        ? "Token has transfer activity"
-        : "No transfer activity found — possibly inactive",
-      icon: hasTx ? "✅" : "⚠️",
-    };
-  } catch {
-    return {
-      name: "Holder Distribution",
-      passed: false,
-      weight: 15,
-      detail: "Could not check holder distribution",
-      icon: "❓",
-    };
-  }
-}
-
-async function checkContractAge(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    // Get contract creation tx
-    const res = await fetch(
-      `${BASESCAN_API}?module=contract&action=getcontractcreation&contractaddresses=${address}&apikey=${apiKey}`
-    );
-    const data = await res.json();
-
-    if (data.status === "1" && data.result?.length > 0) {
-      const txHash = data.result[0].txHash;
-
-      // Get tx details for timestamp
-      const txRes = await fetch(
-        `${BASESCAN_API}?module=proxy&action=eth_getTransactionByHash&txhash=${txHash}&apikey=${apiKey}`
-      );
-      const txData = await txRes.json();
-
-      if (txData.result?.blockNumber) {
-        const blockRes = await fetch(
-          `${BASESCAN_API}?module=proxy&action=eth_getBlockByNumber&tag=${txData.result.blockNumber}&boolean=false&apikey=${apiKey}`
-        );
-        const blockData = await blockRes.json();
-        const timestamp = parseInt(blockData.result?.timestamp || "0", 16);
-        const ageMs = Date.now() - timestamp * 1000;
-        const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-
-        const passed = ageDays > 7; // At least 7 days old
-        return {
-          name: "Contract Age",
-          passed,
-          weight: 10,
-          detail: passed
-            ? `Contract deployed ${ageDays} days ago — established`
-            : `Contract only ${ageDays} day(s) old — very new, higher risk`,
-          icon: passed ? "✅" : "⚠️",
-        };
-      }
-    }
-
-    return {
-      name: "Contract Age",
-      passed: false,
-      weight: 10,
-      detail: "Could not determine contract age",
-      icon: "❓",
-    };
-  } catch {
-    return {
-      name: "Contract Age",
-      passed: false,
-      weight: 10,
-      detail: "Could not determine contract age",
-      icon: "❓",
-    };
-  }
-}
-
-async function checkActivity(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    const res = await fetch(
-      `${BASESCAN_API}?module=token&action=tokentx&contractaddress=${address}&page=1&offset=50&sort=desc&apikey=${apiKey}`
-    );
-    const data = await res.json();
-
-    if (data.status === "1") {
-      const txCount = data.result?.length || 0;
-
-      // Check if recent activity exists (last tx within 7 days)
-      let recentActivity = false;
-      if (txCount > 0) {
-        const lastTxTimestamp = parseInt(data.result[0].timeStamp);
-        const daysSinceLastTx =
-          (Date.now() / 1000 - lastTxTimestamp) / (60 * 60 * 24);
-        recentActivity = daysSinceLastTx < 7;
-      }
-
-      const passed = txCount >= 10 && recentActivity;
-      return {
-        name: "Trading Activity",
-        passed,
-        weight: 15,
-        detail: passed
-          ? `Active token with ${txCount}+ recent transfers`
-          : txCount < 10
-            ? `Low activity — only ${txCount} transfers found`
-            : "No recent trading activity in the last 7 days",
-        icon: passed ? "✅" : "⚠️",
-      };
-    }
-
-    return {
-      name: "Trading Activity",
-      passed: false,
-      weight: 15,
-      detail: "Could not check trading activity",
-      icon: "❓",
-    };
-  } catch {
-    return {
-      name: "Trading Activity",
-      passed: false,
-      weight: 15,
-      detail: "Could not check trading activity",
-      icon: "❓",
-    };
-  }
-}
-
-async function checkDangerousFunctions(
-  address: string,
-  apiKey: string
-): Promise<SafetyCheck> {
-  try {
-    const res = await fetch(
-      `${BASESCAN_API}?module=contract&action=getsourcecode&address=${address}&apikey=${apiKey}`
-    );
-    const data = await res.json();
-
-    if (data.status === "1" && data.result?.[0]?.SourceCode) {
-      const source = data.result[0].SourceCode.toLowerCase();
-      const abi = data.result[0].ABI || "";
-
-      const dangerousFns: string[] = [];
-
-      if (source.includes("function mint") || abi.includes('"name":"mint"'))
-        dangerousFns.push("mint()");
-      if (source.includes("function pause") || abi.includes('"name":"pause"'))
-        dangerousFns.push("pause()");
-      if (
-        source.includes("blacklist") ||
-        source.includes("blocklist") ||
-        source.includes("isblocked")
-      )
-        dangerousFns.push("blacklist");
-      if (source.includes("settaxfee") || source.includes("setfee"))
-        dangerousFns.push("setFee()");
-      if (source.includes("settradingopen") || source.includes("enabletrading"))
-        dangerousFns.push("trading toggle");
-
-      const passed = dangerousFns.length === 0;
-      return {
-        name: "No Dangerous Functions",
-        passed,
-        weight: 15,
-        detail: passed
-          ? "No dangerous owner-only functions detected (mint, pause, blacklist, fee changes)"
-          : `Found risky functions: ${dangerousFns.join(", ")}`,
-        icon: passed ? "✅" : "🚨",
-      };
-    }
-
-    // If source isn't verified, we can't check — already penalized in verification check
-    return {
-      name: "No Dangerous Functions",
-      passed: false,
-      weight: 15,
-      detail:
-        "Cannot check — source code not verified",
-      icon: "❓",
-    };
-  } catch {
-    return {
-      name: "No Dangerous Functions",
-      passed: false,
-      weight: 15,
-      detail: "Could not analyze contract functions",
-      icon: "❓",
-    };
   }
 }
