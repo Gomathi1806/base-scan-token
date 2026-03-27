@@ -1,42 +1,17 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjkyNzgwNCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweEUzMDVlQjFiYzI2ZDcwN2I4NzE1YzMwOTBBZTk3NUFCMWY1MERhOTAifQ",
+    "header": ""header": "eyJmaWQiOjkyNzgwNCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweEUzMDVlQjFiYzI2ZDcwN2I4NzE1YzMwOTBBZTk3NUFCMWY1MERhOTAifQ",
     "payload": "eyJkb21haW4iOiJiYXNlLXNjYW4tdG9rZW4udmVyY2VsLmFwcCJ9",
     "signature": "BRoBJ/BFFuRjqCZxYjwuRpZdI4Y3J8e1SE8HbBusuosYyY+nkCQDArJVKP+gByn1cyBtgc/YqttQEtLTaK1vwxw="
-  },
-  "miniapp": {
-    "version": "1",
-    "name": "Base Token Guard",
-    "homeUrl": "https://base-scan-token.vercel.app",
-    "imageUrl": "https://base-scan-token.vercel.app/image.png",
-    "iconUrl": "https://base-scan-token.vercel.app/icon.png",
-    "buttonTitle": "Check this out",
-    "splashImageUrl": "https://base-token-guard.vercel.app/splash.png",
-    "splashBackgroundColor": "#0f172a",
-    "subtitle": "Token safety scanner",
-    "description": "Check any Base token for rug pulls, honeypots, and red flags. Instant safety reports.",
-    "screenshotUrls": [
-      "https://base-token-guard.vercel.app/screenshots/scan-result.png",
-      "https://base-token-guard.vercel.app/screenshots/safe-token.png",
-      "https://base-token-guard.vercel.app/screenshots/danger-token.png"
-    ],
-    "primaryCategory": "finance",
-    "tags": ["defi", "security", "tokens", "safety"],
-    "heroImageUrl": "https://base-token-guard.vercel.app/og-default.png",
-    "tagline": "Check before you buy",
-    "ogTitle": "Base Token Guard",
-    "ogDescription": "Instant token safety reports for Base chain",
-    "ogImageUrl": "https://base-token-guard.vercel.app/og-default.png"
   },
   "frame": {
     "version": "1",
     "name": "Base Token Guard",
-    "iconUrl": "https://base-token-guard.vercel.app/icon.png",
-    "homeUrl": "https://base-token-guard.vercel.app",
-    "imageUrl": "https://base-scan-token.vercel.app/image.png",
+    "iconUrl": "https://base-scan-token.vercel.app/icon.png",
+    "homeUrl": "https://base-scan-token.vercel.app",
+    "imageUrl": "https://base-scan-token.vercel.app/og-default.png",
     "buttonTitle": "Check Token Safety",
-    "splashImageUrl": "https://base-token-guard.vercel.app/splash.png",
-    "splashBackgroundColor": "#0f172a",
-    "webhookUrl": "https://base-scan-token.vercel.app/api/webhook"
+    "splashImageUrl": "https://base-scan-token.vercel.app/splash.png",
+    "splashBackgroundColor": "#0f172a"
   }
 }
