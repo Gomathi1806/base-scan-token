@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Metadata } from 'next';
+
 // Dynamic import needed since @farcaster/frame-sdk is client-only
 const TokenScanner = dynamic(() => import("@/components/TokenScanner"), {
   ssr: false,
@@ -14,11 +14,7 @@ const TokenScanner = dynamic(() => import("@/components/TokenScanner"), {
     </div>
   ),
 });
-export const metadata: Metadata = {
-  other: {
-    'base:app_id': '69c67557638fc70642e54a00',
-  },
-};
+
 
 export default function Home() {
   return <TokenScanner />;
