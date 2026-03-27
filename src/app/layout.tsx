@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import Head from 'next/head';
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://base-token-guard.vercel.app";
 
@@ -29,6 +30,7 @@ export const metadata: Metadata = {
     "fc:frame": JSON.stringify({
       version: "next",
       imageUrl: `${appUrl}/og-default.png`,
+      "base:app_id": "69c67557638fc70642e54a00",
       button: {
         title: "🛡️ Check Token Safety",
         action: {
