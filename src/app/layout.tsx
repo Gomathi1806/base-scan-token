@@ -1,36 +1,31 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import Head from 'next/head';
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://base-token-guard.vercel.app";
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://base-scan-token.vercel.app";
 
 export const metadata: Metadata = {
   title: "Base Token Guard — Check Any Token Safety",
   description: "Instantly scan Base chain tokens for rug pulls, honeypots, and red flags.",
-  
-  // Standard Open Graph (works everywhere: Twitter, Discord, Base App, etc.)
   openGraph: {
     title: "🛡️ Base Token Guard",
     description: "Check any Base token safety in 1 click",
     images: [`${appUrl}/og-default.png`],
-    type: "website",
   },
-  
-  // Twitter card
   twitter: {
     card: "summary_large_image",
     title: "🛡️ Base Token Guard",
     description: "Check any Base token safety in 1 click",
     images: [`${appUrl}/og-default.png`],
   },
-
   other: {
-    // Farcaster Frame embed meta (keeps Warpcast compatibility)
+    // ⭐ Base.dev app verification — paste YOUR app_id from base.dev
+    "base:app_id": "69c67557638fc70642e54a00",
+
+    // Farcaster frame embed (keeps Warpcast working)
     "fc:frame": JSON.stringify({
       version: "next",
       imageUrl: `${appUrl}/og-default.png`,
-      "base:app_id": "69c67557638fc70642e54a00",
       button: {
         title: "🛡️ Check Token Safety",
         action: {
