@@ -1,14 +1,16 @@
 {
   "accountAssociation": {
-    "header": "REPLACE_WITH_YOUR_SIGNED_HEADER",
-    "payload": "REPLACE_WITH_YOUR_SIGNED_PAYLOAD",
-    "signature": "REPLACE_WITH_YOUR_SIGNATURE"
+    "header": "eyJmaWQiOjkyNzgwNCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweEUzMDVlQjFiYzI2ZDcwN2I4NzE1YzMwOTBBZTk3NUFCMWY1MERhOTAifQ",
+    "payload": "eyJkb21haW4iOiJiYXNlLXNjYW4tdG9rZW4udmVyY2VsLmFwcCJ9",
+    "signature": "BRoBJ/BFFuRjqCZxYjwuRpZdI4Y3J8e1SE8HbBusuosYyY+nkCQDArJVKP+gByn1cyBtgc/YqttQEtLTaK1vwxw="
   },
   "miniapp": {
     "version": "1",
     "name": "Base Token Guard",
-    "homeUrl": "https://base-token-guard.vercel.app",
-    "iconUrl": "https://base-token-guard.vercel.app/icon.png",
+    "homeUrl": "https://base-scan-token.vercel.app",
+    "imageUrl": "https://base-scan-token.vercel.app/image.png",
+    "iconUrl": "https://base-scan-token.vercel.app/icon.png",
+    "buttonTitle": "Check this out",
     "splashImageUrl": "https://base-token-guard.vercel.app/splash.png",
     "splashBackgroundColor": "#0f172a",
     "subtitle": "Token safety scanner",
@@ -31,9 +33,10 @@
     "name": "Base Token Guard",
     "iconUrl": "https://base-token-guard.vercel.app/icon.png",
     "homeUrl": "https://base-token-guard.vercel.app",
-    "imageUrl": "https://base-token-guard.vercel.app/og-default.png",
+    "imageUrl": "https://base-scan-token.vercel.app/image.png",
     "buttonTitle": "Check Token Safety",
     "splashImageUrl": "https://base-token-guard.vercel.app/splash.png",
-    "splashBackgroundColor": "#0f172a"
+    "splashBackgroundColor": "#0f172a",
+    "webhookUrl": "https://base-scan-token.vercel.app/api/webhook"
   }
 }
