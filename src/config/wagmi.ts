@@ -4,7 +4,7 @@ import { injected } from 'wagmi/connectors';
 import { Attribution } from 'ox/erc8021';
 
 // ⭐ YOUR BUILDER CODE — from base.dev > Settings > Builder Code
-const BUILDER_CODE = 'YOUR-BUILDER-CODE-HERE';  // e.g., 'bc_b7k3p9da'
+const BUILDER_CODE = 'bc_5kcgknly';  // e.g., 'bc_b7k3p9da'
 
 // This suffix gets auto-appended to ALL transactions from your app
 const DATA_SUFFIX = Attribution.toDataSuffix({
