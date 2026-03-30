@@ -7,11 +7,27 @@
   "frame": {
     "version": "1",
     "name": "Base Token Guard",
-    "iconUrl": "https://base-scan-token.vercel.app/icon.png",
+    "subtitle": "Token safety scanner",
+    "description": "Check any Base token for rug pulls, honeypots, and red flags. Instant safety reports.",
     "homeUrl": "https://base-scan-token.vercel.app",
+    "iconUrl": "https://base-scan-token.vercel.app/icon.png",
     "imageUrl": "https://base-scan-token.vercel.app/og-default.png",
-    "buttonTitle": "Check Token Safety",
     "splashImageUrl": "https://base-scan-token.vercel.app/splash.png",
-    "splashBackgroundColor": "#0f172a"
+    "splashBackgroundColor": "#0f172a",
+    "screenshotUrls": [
+      "https://base-scan-token.vercel.app/screenshots/scan-result.png",
+      "https://base-scan-token.vercel.app/screenshots/safe-token.png",
+      "https://base-scan-token.vercel.app/screenshots/danger-token.png"
+    ],
+    "primaryCategory": "finance",
+    "heroImageUrl": "https://base-scan-token.vercel.app/og-default.png",
+    "marketingTagline": "Check before you buy",
+    "buttonTitle": "Check Token Safety",
+    "ogTitle": "Base Token Guard",
+    "ogDescription": "Instant token safety reports for Base chain",
+    "ogImageUrl": "https://base-scan-token.vercel.app/og-default.png",
+    "castShareUrl": "https://base-scan-token.vercel.app/",
+    "webhookUrl": "https://base-scan-token.vercel.app/api/webhook"
   }
 }
+
