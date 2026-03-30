@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { initApp, shareResult, openExternalUrl, getTokenViewUrl, getSwapUrl, getContext } from "@/lib/sdk-wrapper";
 import type { TokenSafetyReport } from "@/lib/scanner";
+import sdk from "@farcaster/frame-sdk";
 
 export default function TokenScanner() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
@@ -11,6 +12,10 @@ export default function TokenScanner() {
   const [report, setReport] = useState<TokenSafetyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanHistory, setScanHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+  sdk.actions.ready();
+}, []);
 
   // Initialize Hybrid SDK
   useEffect(() => {
